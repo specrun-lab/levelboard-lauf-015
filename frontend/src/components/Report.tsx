@@ -10,6 +10,7 @@ import {
   isComplete,
   isInLevel,
   levelHasData,
+  LEVEL_TITLES,
   metricObject,
   reachedLevel,
   totalBuildSeconds,
@@ -36,6 +37,11 @@ function findLevel(results: Results, level: number): LevelResult | undefined {
 function jobSeconds(value: unknown): string {
   const seconds = asNumber(value);
   return seconds === null ? '–' : formatSeconds(seconds);
+}
+
+function msText(value: unknown): string {
+  const milliseconds = asNumber(value);
+  return milliseconds === null ? '–' : `${milliseconds} ms`;
 }
 
 export default function Report({ results, usage }: ReportProps) {
@@ -139,11 +145,11 @@ export default function Report({ results, usage }: ReportProps) {
                 <dl>
                   <div className="report-fact">
                     <dt>p50</dt>
-                    <dd data-testid="report-p50">{asNumber(loadtest.p50Ms) ?? '–'} ms</dd>
+                    <dd data-testid="report-p50">{msText(loadtest.p50Ms)}</dd>
                   </div>
                   <div className="report-fact">
                     <dt>p95</dt>
-                    <dd data-testid="report-p95">{asNumber(loadtest.p95Ms) ?? '–'} ms</dd>
+                    <dd data-testid="report-p95">{msText(loadtest.p95Ms)}</dd>
                   </div>
                   <div className="report-fact">
                     <dt>Durchsatz</dt>
@@ -250,7 +256,7 @@ export default function Report({ results, usage }: ReportProps) {
                     data-status={level.status}
                   >
                     <span className="report-level-title">
-                      L{String(level.level).padStart(2, '0')} {level.title}
+                      L{String(level.level).padStart(2, '0')} {LEVEL_TITLES[level.level - 1]}
                     </span>
                     <span className={`report-level-status status-${level.status}`}>
                       {level.status === 'bestanden'

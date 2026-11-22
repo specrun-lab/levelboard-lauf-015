@@ -207,6 +207,9 @@ func decodeResultBody(data []byte) (*ResultReport, error) {
 			return nil, errors.New("ungültiger Checkname")
 		}
 		var ok bool
+		if !bytes.Equal(bytes.TrimSpace(okRaw), []byte("true")) && !bytes.Equal(bytes.TrimSpace(okRaw), []byte("false")) {
+			return nil, errors.New("ungültiges ok")
+		}
 		if err := json.Unmarshal(okRaw, &ok); err != nil {
 			return nil, errors.New("ungültiges ok")
 		}

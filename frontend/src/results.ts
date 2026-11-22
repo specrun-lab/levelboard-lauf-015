@@ -322,7 +322,7 @@ export function usageLevel(usage: Usage | null, level: number): UsageLevel | nul
   if (!usage || !isObject(usage.levels)) return null;
   const entry = usage.levels[String(level)];
   if (!isObject(entry)) return null;
-  if (typeof entry.inLevel === 'number' && Number.isInteger(entry.inLevel)) {
+  if (typeof entry.inLevel === 'number' && Number.isInteger(entry.inLevel) && entry.inLevel >= 1 && entry.inLevel <= 10) {
     return { inLevel: entry.inLevel };
   }
   if (validUsageNumbers(entry)) {

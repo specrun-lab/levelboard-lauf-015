@@ -151,6 +151,7 @@ func TestValidation(t *testing.T) {
 		`{"checks":[{"name":"a","ok":true}],"durationMs":1.5}`,
 		`{"checks":[{"name":"","ok":true}],"durationMs":1}`,
 		`{"checks":[{"name":"a","ok":"ja"}],"durationMs":1}`,
+		`{"checks":[{"name":"a","ok":null}],"durationMs":1}`,
 		`{"checks":[{"name":"a","ok":true,"extra":1}],"durationMs":1}`,
 		`{"checks":[{"name":"a","ok":true}],"durationMs":1,"extra":1}`,
 		`{"checks":[{"name":"a","ok":true}],"durationMs":1,"metrics":[]}`,
