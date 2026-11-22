@@ -66,3 +66,82 @@ jobs:
           docker push "$IMAGE_PREFIX-backend:main"
       - if: always()
         run: docker compose down -v
+
+  deploy:
+    needs: images
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+      IMAGE_TAG: ${{ github.sha }}
+      RUN_ID: lauf-015
+      LIVE_DOMAIN: ${{ vars.LIVE_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+      - name: Auf den Server deployen
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${LIVE_DOMAIN:-}" ]; then
+            echo "LIVE_DOMAIN fehlt"
+            exit 1
+          fi
+          if [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ] || [ -z "${DEPLOY_SSH_KEY:-}" ] || [ -z "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            echo "Deploy-Secrets fehlen"
+            exit 1
+          fi
+          LIVE_URL="https://${RUN_ID}.${LIVE_DOMAIN}"
+          echo "LIVE_URL=$LIVE_URL" >> "$GITHUB_ENV"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          SSH_HOST="${DEPLOY_USER}@${DEPLOY_HOST}"
+          SSH_OPTIONS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts)
+          ssh "${SSH_OPTIONS[@]}" "$SSH_HOST" "mkdir -p ~/runs/${RUN_ID}"
+          scp "${SSH_OPTIONS[@]}" deploy/compose.yml "$SSH_HOST:~/runs/${RUN_ID}/compose.yml"
+          ENV_FILE="$(mktemp)"
+          printf 'RUN_ID=%s\nIMAGE_PREFIX=%s\nIMAGE_TAG=%s\n' "$RUN_ID" "$IMAGE_PREFIX" "$IMAGE_TAG" > "$ENV_FILE"
+          scp "${SSH_OPTIONS[@]}" "$ENV_FILE" "$SSH_HOST:~/runs/${RUN_ID}/.env"
+          rm -f "$ENV_FILE"
+          ssh "${SSH_OPTIONS[@]}" "$SSH_HOST" "cd ~/runs/${RUN_ID} && docker compose pull -q && docker compose up -d --wait --remove-orphans"
+          ready=0
+          for _ in $(seq 1 180); do
+            body="$(curl -fsS "$LIVE_URL/api/health" 2>/dev/null || true)"
+            if printf '%s' "$body" | grep -qF "\"commit\":\"$IMAGE_TAG\""; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "Live-Seite meldet den Commit $IMAGE_TAG nicht"
+            exit 1
+          fi
+      - uses: actions/download-artifact@v8
+        with:
+          name: levelboard-report
+          path: artifact
+      - name: Ergebnisse an die Live-API melden
+        run: |
+          set -euo pipefail
+          RESULTS="$(find artifact -name results.json | head -n 1)"
+          test -n "$RESULTS"
+          node checks/report-live.mjs "$RESULTS" "$LIVE_URL"
+      - name: Live-Seite prüfen
+        run: |
+          set -euo pipefail
+          curl -fsS "$LIVE_URL/" > /dev/null
+          curl -fsS "$LIVE_URL/config.json" | grep -q '"api"'
